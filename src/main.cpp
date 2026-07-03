@@ -11,51 +11,65 @@ const int ETH_SCLK_PIN = 13;  // Horloge SPI
 const int ETH_MISO_PIN = 12;  // Master Input Slave Output
 const int ETH_MOSI_PIN = 11;  // Master Output Slave Input
 
-// Adresse MAC unique fictive pour ta carte
-byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
+// Tableau dynamique qui va recevoir la VRAIE adresse MAC physique de l'ESP32
+byte mac[6]; 
 
 // =================================================================
 // 🚀 INITIALISATION
 // =================================================================
 void setup() {
     Serial.begin(115200);
-    delay(1000);
+    delay(2000); // Laisse le temps au moniteur série de s'ouvrir proprement
+    
     Serial.println("\n==================================================");
-    Serial.println("INITIALISATION DU PORT RJ45 WAVESHARE (W5500)");
+    Serial.println("🌐 PORT ETHERNET WAVESHARE (CLASSE C - RFC 1918)");
     Serial.println("==================================================");
 
-    // Étape 1 : Réinitialiser physiquement la puce Ethernet soudée sur la carte
+    // 🔒 Étape 1 : Récupérer de force la VRAIE adresse MAC gravée en usine (eFuse)
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    
+    Serial.print("🔍 Vraie adresse MAC détectée sur le silicium : ");
+    for (int i = 0; i < 6; i++) {
+        if (mac[i] < 0x10) Serial.print("0"); // Ajoute un zéro de formatage si nécessaire
+        Serial.print(mac[i], HEX);
+        if (i < 5) Serial.print(":");
+    }
+    Serial.println();
+
+    // Étape 2 : Réinitialiser physiquement la puce Ethernet soudée sur la carte
     pinMode(ETH_RST_PIN, OUTPUT);
     digitalWrite(ETH_RST_PIN, LOW);
     delay(50);
     digitalWrite(ETH_RST_PIN, HIGH); // Réveille le contrôleur W5500
     delay(300);
 
-    // Étape 2 : Forcer le bus SPI sur les broches spécifiques de Waveshare
+    // Étape 3 : Forcer le bus SPI sur les broches spécifiques de Waveshare
     SPI.begin(ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN, ETH_CS_PIN);
 
-    // Étape 3 : Assigner la broche Chip Select à la bibliothèque Ethernet
+    // Étape 4 : Assigner la broche Chip Select à la bibliothèque Ethernet
     Ethernet.init(ETH_CS_PIN);
 
-    // Étape 4 : Demander une adresse IP automatique (DHCP)
+    // Étape 5 : Demander une adresse IP automatique (DHCP)
     Serial.println("Connexion au réseau... Attente du DHCP...");
     
     if (Ethernet.begin(mac) == 0) {
-        Serial.println("❌ Échec DHCP : Aucun routeur n'a donné d'IP.");
-        Serial.println("👉 Bascule automatique sur IP Fixe pour test direct PC ↔ ESP32");
+        Serial.println("⚠️ Aucun serveur DHCP détecté (Liaison par câble direct PC/ADAM).");
+        Serial.println("🚀 Application de l'IP Fixe réglementaire de Classe C...");
         
-        // IP de secours si tu branches l'ESP32 DIRECTEMENT à ton ordi avec un câble
-        IPAddress ipManuel(10, 0, 0, 50); 
-        IPAddress dnsManuel(10, 0, 0, 1);
-        IPAddress gatewayManuel(10, 0, 0, 1);
+        // Configuration fixe pour ton infrastructure locale
+        IPAddress ipManuel(192, 168, 1, 50); 
+        IPAddress dnsManuel(192, 168, 1, 1);
+        IPAddress gatewayManuel(192, 168, 1, 1);
         IPAddress subnetManuel(255, 255, 255, 0);
+        
+        // On initialise la puce avec la vraie MAC et l'IP de Classe C
         Ethernet.begin(mac, ipManuel, dnsManuel, gatewayManuel, subnetManuel);
     }
 
-    // Étape 5 : Affichage du succès et de l'IP obtenue
+    // Étape 6 : Affichage du succès final
     Serial.println("==================================================");
-    Serial.println("--- ✅ PORT ETHERNET WAVESHARE CONFIGURÉ ! ---");
-    Serial.print("👉 TAPE DANS TON INVITE DE COMMANDE : ping ");
+    Serial.println("--- ✅ INFRASTRUCTURE FILAIRE ACTIVED ! ---");
+    Serial.print("👉 LANCE LA COMMANDE DANS TON PC : ping ");
     Serial.println(Ethernet.localIP());
     Serial.println("==================================================");
 }
@@ -71,7 +85,7 @@ void loop() {
         precedentMillis = millis();
         
         if (statutLien == LinkON) {
-            Serial.print("[Statut] Réseau branché. Prêt à recevoir un Ping sur l'IP : ");
+            Serial.print("[Statut OK] Prêt à recevoir un Ping sur l'IP : ");
             Serial.println(Ethernet.localIP());
         } else if (statutLien == LinkOFF) {
             Serial.println("🚨 Alerte : Câble RJ45 débranché de la carte Waveshare !");
