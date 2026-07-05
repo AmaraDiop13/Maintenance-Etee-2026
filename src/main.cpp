@@ -1,95 +1,163 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <Ethernet.h>
+#include <WiFi.h>      
+#include <WebServer.h> 
+#include "page_html.h" // Interface graphique brute
 
 // =================================================================
-// ⚙️ MAPPING MATÉRIEL EXACT DE LA CARTE WAVESHARE ESP32-S3-ETH
+// ⚙️ CONFIGURATION DIRECTE (Évite les erreurs de fichiers manquants)
 // =================================================================
-const int ETH_RST_PIN  = 9;   // Reset du W5500
-const int ETH_CS_PIN   = 14;  // Chip Select (SCSn)
-const int ETH_SCLK_PIN = 13;  // Horloge SPI
-const int ETH_MISO_PIN = 12;  // Master Input Slave Output
-const int ETH_MOSI_PIN = 11;  // Master Output Slave Input
+const int ETH_RST_PIN  = 9;   
+const int ETH_CS_PIN   = 14;  
+const int ETH_SCLK_PIN = 13;  
+const int ETH_MISO_PIN = 12;  
+const int ETH_MOSI_PIN = 11;  
 
-// Tableau dynamique qui va recevoir la VRAIE adresse MAC physique de l'ESP32
-byte mac[6]; 
+const IPAddress IP_ESP32_ETH(192, 168, 1, 50);
+const IPAddress IP_ADAM(192, 168, 1, 1);
+const IPAddress PASSERELLE_ETH(192, 168, 1, 1);
+const IPAddress MASQUE_ETH(255, 255, 255, 0);
+
+const String NOM_BARRAGE = "Barrage_AYLMER";
+const String MOT_DE_PASSE_WIFI = "Aylmer2026";
+
+const String NOMS_CANAUX[8] = {
+    "Capteur Temperature Cuve",
+    "Exemple:Capteur Pression Vapeur",
+    "Exemple:Debitmetre Entree",
+    "Exemple:Niveau Cuve Eau",
+    "Canal Non Utilise",  
+    "Canal Non Utilise",  
+    "Exemple:Vitesse Turbine",
+    "Exemple:Mesure Secours"
+};
 
 // =================================================================
-// 🚀 INITIALISATION
+// 📊 VARIABLES GLOBALES DU SYSTÈME
 // =================================================================
-void setup() {
-    Serial.begin(115200);
-    delay(2000); // Laisse le temps au moniteur série de s'ouvrir proprement
-    
-    Serial.println("\n==================================================");
-    Serial.println("🌐 PORT ETHERNET WAVESHARE (CLASSE C - RFC 1918)");
-    Serial.println("==================================================");
+uint16_t valeursBrutesADAM[8] = {0};
+float valeursTensions[8] = {0.0};
+int estVide[8] = {0};
+bool adamEnLigne = false;
 
-    // 🔒 Étape 1 : Récupérer de force la VRAIE adresse MAC gravée en usine (eFuse)
-    esp_read_mac(mac, ESP_MAC_WIFI_STA);
-    
-    Serial.print("🔍 Vraie adresse MAC détectée sur le silicium : ");
-    for (int i = 0; i < 6; i++) {
-        if (mac[i] < 0x10) Serial.print("0"); // Ajoute un zéro de formatage si nécessaire
-        Serial.print(mac[i], HEX);
-        if (i < 5) Serial.print(":");
+byte mac[6];
+EthernetClient modbusClient;
+WebServer server(80); 
+
+// =================================================================
+// 🌐 GESTION DU SERVEUR WEB (WIFI)
+// =================================================================
+void handleRoot() {
+    String html = String(INDEX_HTML);
+    for(int i = 0; i < 8; i++) {
+        html.replace("%NOM" + String(i) + "%", NOMS_CANAUX[i]);
     }
-    Serial.println();
+    server.send(200, "text/html", html);
+}
 
-    // Étape 2 : Réinitialiser physiquement la puce Ethernet soudée sur la carte
-    pinMode(ETH_RST_PIN, OUTPUT);
-    digitalWrite(ETH_RST_PIN, LOW);
-    delay(50);
-    digitalWrite(ETH_RST_PIN, HIGH); // Réveille le contrôleur W5500
-    delay(300);
-
-    // Étape 3 : Forcer le bus SPI sur les broches spécifiques de Waveshare
-    SPI.begin(ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN, ETH_CS_PIN);
-
-    // Étape 4 : Assigner la broche Chip Select à la bibliothèque Ethernet
-    Ethernet.init(ETH_CS_PIN);
-
-    // Étape 5 : Demander une adresse IP automatique (DHCP)
-    Serial.println("Connexion au réseau... Attente du DHCP...");
-    
-    if (Ethernet.begin(mac) == 0) {
-        Serial.println("⚠️ Aucun serveur DHCP détecté (Liaison par câble direct PC/ADAM).");
-        Serial.println("🚀 Application de l'IP Fixe réglementaire de Classe C...");
-        
-        // Configuration fixe pour ton infrastructure locale
-        IPAddress ipManuel(192, 168, 1, 50); 
-        IPAddress dnsManuel(192, 168, 1, 1);
-        IPAddress gatewayManuel(192, 168, 1, 1);
-        IPAddress subnetManuel(255, 255, 255, 0);
-        
-        // On initialise la puce avec la vraie MAC et l'IP de Classe C
-        Ethernet.begin(mac, ipManuel, dnsManuel, gatewayManuel, subnetManuel);
-    }
-
-    // Étape 6 : Affichage du succès final
-    Serial.println("==================================================");
-    Serial.println("--- ✅ INFRASTRUCTURE FILAIRE ACTIVED ! ---");
-    Serial.print("👉 LANCE LA COMMANDE DANS TON PC : ping ");
-    Serial.println(Ethernet.localIP());
-    Serial.println("==================================================");
+void handleData() {
+    String json = "{";
+    json += "\"adam_en_ligne\":" + String(adamEnLigne ? "true" : "false") + ",";
+    json += "\"nom_barrage\":\"" + NOM_BARRAGE + "\",";
+    json += "\"brutes\":[" + String(valeursBrutesADAM[0]) + "," + String(valeursBrutesADAM[1]) + "," + String(valeursBrutesADAM[2]) + "," + String(valeursBrutesADAM[3]) + "," + String(valeursBrutesADAM[4]) + "," + String(valeursBrutesADAM[5]) + "," + String(valeursBrutesADAM[6]) + "," + String(valeursBrutesADAM[7]) + "],";
+    json += "\"tensions\":[" + String(valeursTensions[0],2) + "," + String(valeursTensions[1],2) + "," + String(valeursTensions[2],2) + "," + String(valeursTensions[3],2) + "," + String(valeursTensions[4],2) + "," + String(valeursTensions[5],2) + "," + String(valeursTensions[6],2) + "," + String(valeursTensions[7],2) + "],";
+    json += "\"est_vide\":[" + String(estVide[0]) + "," + String(estVide[1]) + "," + String(estVide[2]) + "," + String(estVide[3]) + "," + String(estVide[4]) + "," + String(estVide[5]) + "," + String(estVide[6]) + "," + String(estVide[7]) + "]";
+    json += "}";
+    server.send(200, "application/json", json);
 }
 
 // =================================================================
-// 🔄 BOUCLE PRINCIPALE
+// 📥 LIAISON MODBUS TCP (ETHERNET CORRIGÉE POUR PLAGE +/-10V)
 // =================================================================
-void loop() {
-    auto statutLien = Ethernet.linkStatus();
-    
-    static unsigned long precedentMillis = 0;
-    if (millis() - precedentMillis > 4000) {
-        precedentMillis = millis();
-        
-        if (statutLien == LinkON) {
-            Serial.print("[Statut OK] Prêt à recevoir un Ping sur l'IP : ");
-            Serial.println(Ethernet.localIP());
-        } else if (statutLien == LinkOFF) {
-            Serial.println("🚨 Alerte : Câble RJ45 débranché de la carte Waveshare !");
+void requeteLectureADAM() {
+    if (!modbusClient.connected()) {
+        if (!modbusClient.connect(IP_ADAM, 502)) {
+            adamEnLigne = false;
+            for (int i = 0; i < 8; i++) {
+                valeursBrutesADAM[i] = 0; valeursTensions[i] = 0.0; estVide[i] = 0;
+            }
+            return;
         }
     }
-    delay(10);
+
+    uint8_t requeteLireAI[12] = {0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x01, 0x04, 0x00, 0x00, 0x00, 0x08};
+    modbusClient.write(requeteLireAI, 12);
+
+    unsigned long timeout = millis();
+    while (modbusClient.available() < 25) {
+        if (millis() - timeout > 300) {
+            adamEnLigne = false; modbusClient.stop(); return;
+        }
+    }
+
+    uint8_t reponse[25];
+    modbusClient.read(reponse, 25);
+    adamEnLigne = true;
+
+    int indexOctet = 9;
+    for (int i = 0; i < 8; i++) {
+        uint8_t highByte = reponse[indexOctet];
+        uint8_t lowByte  = reponse[indexOctet + 1];
+        valeursBrutesADAM[i] = (highByte << 8) | lowByte;
+        
+        // 1. VRAIE formule pour l'ADAM configuré d'usine en +/- 10V
+        valeursTensions[i] = ((float)valeursBrutesADAM[i] / 65535.0) * 20.0 - 10.0;
+        
+        // Seuil d'atténuation : force à 0.0V si la tension oscille juste au niveau du point mort
+        if (abs(valeursTensions[i]) < 0.06) {
+            valeursTensions[i] = 0.0;
+        }
+
+        // 2. Filtrage intelligent du bruit électromagnétique (canal flottant en l'air)
+        if (valeursBrutesADAM[i] >= 32740 && valeursBrutesADAM[i] <= 32785) {
+            estVide[i] = 1;
+            valeursTensions[i] = 0.0;
+        } else {
+            estVide[i] = 0;
+        }
+        
+        indexOctet += 2;
+    }
+}
+
+// =================================================================
+// 🚀 DÉMARRAGE DU MATÉRIEL
+// =================================================================
+void setup() {
+    Serial.begin(115200);
+    delay(1000);
+
+    // 1. Initialisation du Wi-Fi Point d'Accès de Maintenance (192.168.4.1)
+    String ssId = NOM_BARRAGE; ssId.replace(" ", "_");
+    WiFi.softAP(ssId.c_str(), MOT_DE_PASSE_WIFI.c_str());
+    Serial.println("\n[Wi-Fi] Point d'acces active : " + ssId);
+    Serial.print("[Wi-Fi] Dashboard disponible sur : http://");
+    Serial.println(WiFi.softAPIP()); 
+
+    // 2. Initialisation Physique de l'Ethernet RJ45
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    pinMode(ETH_RST_PIN, OUTPUT);
+    digitalWrite(ETH_RST_PIN, LOW); delay(50);
+    digitalWrite(ETH_RST_PIN, HIGH); delay(300);
+
+    SPI.begin(ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN, ETH_CS_PIN);
+    Ethernet.init(ETH_CS_PIN);
+    Ethernet.begin(mac, IP_ESP32_ETH, IP_ADAM, PASSERELLE_ETH, MASQUE_ETH);
+    Serial.println("[Ethernet] Liaison RJ45 configuree vers l'ADAM.");
+
+    // 3. Activation des routes du Serveur Web d'infrastructure
+    server.on("/", handleRoot);
+    server.on("/data", handleData);
+    server.begin();
+}
+
+void loop() {
+    server.handleClient(); // Écoute le réseau Wi-Fi de ton ordinateur/téléphone
+
+    static unsigned long precedentMillisModbus = 0;
+    if (millis() - precedentMillisModbus > 1000) {
+        precedentMillisModbus = millis();
+        requeteLectureADAM(); // Sonde l'ADAM par le câble réseau
+    }
 }
