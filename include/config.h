@@ -5,12 +5,13 @@
 #include <SPI.h>
 #include <Ethernet.h>
 
-// Broches Matérielles (Carte d'extension W5500 / Waveshare)
+// Broches Matérielles (Carte d'extension W5500 et Lecteur SD)
 const int ETH_RST_PIN  = 9;   
 const int ETH_CS_PIN   = 14;  
 const int ETH_SCLK_PIN = 13;  
 const int ETH_MISO_PIN = 12;  
 const int ETH_MOSI_PIN = 11;  
+const int SD_CS_PIN    = 4;     // Broche CS dédiée pour la carte MicroSD
 
 // Adresses IP Statiques de ton Réseau Laboratoire
 const IPAddress IP_ESP32_ETH(192, 168, 1, 50);
@@ -24,14 +25,14 @@ const String MOT_DE_PASSE_WIFI = "Aylmer2026";
 
 // Étiquettes textuelles des Canaux de Supervision
 const String NOMS_CANAUX[8] = {
-    "Capteur Temperature Cuve",
-    "Exemple:Capteur Pression Vapeur",
-    "Exemple:Debitmetre Entree",
-    "Exemple:Niveau Cuve Eau",
-    "Canal Non Utilise",  
-    "Canal Non Utilise",  
-    "Exemple:Vitesse Turbine",
-    "Exemple:Mesure Secours"
+    "Courant Turbine (Dwyer CCT60)", // Canal 0 étalonné en Ampères
+    "Capteur Pression Vapeur",
+    "Débitmètre Entrée",
+    "Niveau Cuve Eau",
+    "Canal Non Utilisé",  
+    "Canal Non Utilisé",  
+    "Vitesse Turbine",
+    "Mesure Sécurité Secours"
 };
 
 #endif

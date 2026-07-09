@@ -1,5 +1,5 @@
 #include "modbus_adam.h"
-#include "config.h" // Appelle directement ton fichier dans include/
+#include "config.h"
 #include <Ethernet.h>
 
 uint16_t valeursBrutesADAM[8] = {0};
@@ -7,20 +7,18 @@ float valeursConverties[8] = {0.0};
 int estVide[8] = {0};
 bool adamEnLigne = false;
 
-// 🛠️ FORÇAGE MANUEL INTÉGRIAL : On fige tous les canaux sur le mode +/-10V de ton labo
 uint16_t codesConfigurationADAM[8] = {0x0323, 0x0323, 0x0323, 0x0323, 0x0323, 0x0323, 0x0323, 0x0323};
-String unitesCanaux[8] = {"V", "V", "V", "V", "V", "V", "V", "V"};
+String unitesCanaux[8] = {"A", "V", "V", "V", "V", "V", "V", "V"}; // Canal 0 forcé en A (Ampères)
 String typesEntreesDetectes[8] = {"+/- 10 V", "+/- 10 V", "+/- 10 V", "+/- 10 V", "+/- 10 V", "+/- 10 V", "+/- 10 V", "+/- 10 V"};
 
 EthernetClient modbusClient;
 
-// Cette fonction ne fait plus de requête réseau risquée, elle initialise proprement les textes
 void scannerConfigurationADAM() {
-    Serial.println("[MODBUS Scan] Forçage manuel de la configuration en +/- 10 V.");
+    Serial.println("[MODBUS] Configuration figée d'usine sur la plage du labo (+/- 10V).");
     for (int i = 0; i < 8; i++) {
         codesConfigurationADAM[i] = 0x0323; 
         typesEntreesDetectes[i] = "+/- 10 V";
-        unitesCanaux[i] = "V";
+        unitesCanaux[i] = (i == 0) ? "A" : "V"; 
     }
 }
 
@@ -29,7 +27,7 @@ void requeteLectureADAM() {
         if (!modbusClient.connect(IP_ADAM, 502)) {
             adamEnLigne = false;
             for (int i = 0; i < 8; i++) {
-                valeursBrutesADAM[i] = 0; valeursConverties[i] = 0.0; estVide[i] = 0;
+                valeursBrutesADAM[i] = 0; valeursConverties[i] = 0.0; estVide[i] = 1;
             }
             return;
         }
@@ -56,24 +54,27 @@ void requeteLectureADAM() {
         valeursBrutesADAM[i] = (highByte << 8) | lowByte;
         uint16_t brut = valeursBrutesADAM[i];
 
-        // On utilise directement la formule bipolaire +/-10V validée sur l'ADAM
-        valeursConverties[i] = ((float)brut / 65535.0) * 20.0 - 10.0;
-        
-        // Filtrage du canal vide (fil débranché ou flottant)
+        // Équation d'échelle globale de l'ADAM pour du +/- 10V
+        float tensionBrute = ((float)brut / 65535.0) * 20.0 - 10.0;
+
+        // Détection de fil flottant/vide
         if (brut >= 32740 && brut <= 32785) {
             estVide[i] = 1;
             valeursConverties[i] = 0.0;
         } else {
             estVide[i] = 0;
+            
+            // Étalonnage industriel spécifique
+            if (i == 0) {
+                // Étalonnage Dwyer CCT60 (0-10V -> 0-20A). On ne garde que la partie positive
+                if (tensionBrute < 0.05) tensionBrute = 0.0;
+                valeursConverties[i] = tensionBrute * 2.0; 
+            } else {
+                // Canaux standards restants (Volts)
+                if (abs(tensionBrute) < 0.06) tensionBrute = 0.0;
+                valeursConverties[i] = tensionBrute;
+            }
         }
-
-        // Nettoyage des petites oscillations résiduelles autour de 0.0V
-        if (!estVide[i] && abs(valeursConverties[i]) < 0.06) {
-            valeursConverties[i] = 0.0;
-        }
-
-        if (estVide[i]) valeursConverties[i] = 0.0;
-        
         indexOctet += 2;
     }
 }

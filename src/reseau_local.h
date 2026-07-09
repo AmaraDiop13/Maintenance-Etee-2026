@@ -4,6 +4,7 @@
 #include <WebServer.h>
 
 extern WebServer server;
+extern bool sdDisponible; // Statut matériel partagé de la carte mémoire
 
 void initialiserReseaux();
 void handleRoot();

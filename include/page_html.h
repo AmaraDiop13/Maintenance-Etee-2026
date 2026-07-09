@@ -30,6 +30,41 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         .card.empty .status-led { background-color: #555566; box-shadow: none; animation: none; }
         .card.no-adam .status-led { background-color: #ff3333; box-shadow: none; animation: none; }
         @keyframes blinker { 50% { opacity: 0.3; } }
+
+        /* AJOUT LOGS : Styles du bouton de téléchargement SD (Couleur Orange comme l'écriture) */
+        .btn-container { text-align: center; margin-top: 40px; margin-bottom: 30px; width: 100%; }
+        
+        .btn-actif { 
+            display: inline-block; 
+            padding: 14px 28px; 
+            color: #ffffff; 
+            background-color: transparent; 
+            border: 2px solid #ff6600; 
+            text-decoration: none; 
+            font-weight: bold; 
+            border-radius: 6px; 
+            transition: all 0.3s ease; 
+            box-shadow: 0 4px 15px rgba(255, 102, 0, 0.2); 
+        }
+        .btn-actif:hover { 
+            background-color: #ff6600; 
+            color: #ffffff; 
+            box-shadow: 0 4px 20px rgba(255, 102, 0, 0.5); 
+        }
+        
+        .btn-inactif { 
+            display: inline-block; 
+            padding: 14px 28px; 
+            color: #8a8ab0; 
+            background-color: transparent; 
+            border: 2px dashed #555566; 
+            text-decoration: none; 
+            font-weight: bold; 
+            border-radius: 6px; 
+            cursor: not-allowed; 
+            opacity: 0.6; 
+            pointer-events: none; 
+        }
     </style>
     <script>
         setInterval(function() {
@@ -37,26 +72,43 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
                 .then(response => response.json())
                 .then(data => {
                     document.getElementById('main-title').innerText = "MAINTENANCE - " + data.nom_barrage.replace('_', ' ');
+                    
+                    /* AJOUT LOGS : Activation ou désactivation du bouton SD */
+                    let btnSD = document.getElementById('btn-log');
+                    if (data.sd_present) {
+                        btnSD.className = 'btn-actif';
+                        btnSD.innerText = '💾 Télécharger les Journaux (.txt)';
+                    } else {
+                        btnSD.className = 'btn-inactif';
+                        btnSD.innerText = '⚠️ Carte SD non détectée';
+                    }
+
                     for (let i = 0; i < 8; i++) {
                         let card = document.getElementById('card-' + i);
                         let valDiv = document.getElementById('val-' + i);
                         let rawDiv = document.getElementById('raw-' + i);
+                        let modeDiv = document.getElementById('mode-' + i); 
                         
                         if (!data.adam_en_ligne) {
                             card.className = 'card no-adam';
                             valDiv.innerText = '[ PAS DE SIGNAL ]';
                             valDiv.className = 'value no-adam-text';
                             rawDiv.innerText = 'Erreur : Module ADAM introuvable';
+                            modeDiv.innerText = 'Déconnecté'; 
                         } else if (data.est_vide[i]) {
                             card.className = 'card empty';
                             valDiv.innerText = '[ CANAL VIDE ]';
                             valDiv.className = 'value empty-text';
                             rawDiv.innerText = 'Aucun signal (Tension flottante)';
+                            modeDiv.innerText = 'Flottant'; 
                         } else {
                             card.className = 'card';
-                            valDiv.innerText = data.tensions[i] + ' V';
+                            /* ADAPTATION AUTOMATIQUE : Unité dynamique issue du JSON (V ou mA) */
+                            valDiv.innerText = data.tensions[i] + ' ' + data.unites[i];
                             valDiv.className = 'value';
                             rawDiv.innerText = 'Registre Modbus : ' + data.brutes[i];
+                            /* ADAPTATION AUTOMATIQUE : Type de trame détecté */
+                            modeDiv.innerText = 'Configuration : ' + data.config_modes[i];
                         }
                     }
                 }).catch(err => console.log('Erreur rafraîchissement'));
@@ -67,14 +119,18 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     <h1 id="main-title">MAINTENANCE - CHARGEMENT</h1>
     <div class="subtitle">Système de Supervision Double Réseau (Wi-Fi Maintenance ↔ Câble ADAM)</div>
     <div class="grid">
-        <div id="card-0" class="card"><div class="status-led"></div><h3>Canal AI0</h3><div class="alias">%NOM0%</div><div id="val-0" class="value">0.0 V</div><div id="raw-0" class="raw">Registre Modbus : 0</div></div>
-        <div id="card-1" class="card"><div class="status-led"></div><h3>Canal AI1</h3><div class="alias">%NOM1%</div><div id="val-1" class="value">0.0 V</div><div id="raw-1" class="raw">Registre Modbus : 0</div></div>
-        <div id="card-2" class="card"><div class="status-led"></div><h3>Canal AI2</h3><div class="alias">%NOM2%</div><div id="val-2" class="value">0.0 V</div><div id="raw-2" class="raw">Registre Modbus : 0</div></div>
-        <div id="card-3" class="card"><div class="status-led"></div><h3>Canal AI3</h3><div class="alias">%NOM3%</div><div id="val-3" class="value">0.0 V</div><div id="raw-3" class="raw">Registre Modbus : 0</div></div>
-        <div id="card-4" class="card"><div class="status-led"></div><h3>Canal AI4</h3><div class="alias">%NOM4%</div><div id="val-4" class="value">0.0 V</div><div id="raw-4" class="raw">Registre Modbus : 0</div></div>
-        <div id="card-5" class="card"><div class="status-led"></div><h3>Canal AI5</h3><div class="alias">%NOM5%</div><div id="val-5" class="value">0.0 V</div><div id="raw-5" class="raw">Registre Modbus : 0</div></div>
-        <div id="card-6" class="card"><div class="status-led"></div><h3>Canal AI6</h3><div class="alias">%NOM6%</div><div id="val-6" class="value">0.0 V</div><div id="raw-6" class="raw">Registre Modbus : 0</div></div>
-        <div id="card-7" class="card"><div class="status-led"></div><h3>Canal AI7</h3><div class="alias">%NOM7%</div><div id="val-7" class="value">0.0 V</div><div id="raw-7" class="raw">Registre Modbus : 0</div></div>
+        <div id="card-0" class="card"><div class="status-led"></div><h3>Canal AI0</h3><div class="alias">%NOM0%</div><div id="val-0" class="value">0.0 V</div><div id="raw-0" class="raw">Registre Modbus : 0</div><div id="mode-0" style="font-size:0.8rem; opacity:0.6; margin-top:5px;">Scan...</div></div>
+        <div id="card-1" class="card"><div class="status-led"></div><h3>Canal AI1</h3><div class="alias">%NOM1%</div><div id="val-1" class="value">0.0 V</div><div id="raw-1" class="raw">Registre Modbus : 0</div><div id="mode-1" style="font-size:0.8rem; opacity:0.6; margin-top:5px;">Scan...</div></div>
+        <div id="card-2" class="card"><div class="status-led"></div><h3>Canal AI2</h3><div class="alias">%NOM2%</div><div id="val-2" class="value">0.0 V</div><div id="raw-2" class="raw">Registre Modbus : 0</div><div id="mode-2" style="font-size:0.8rem; opacity:0.6; margin-top:5px;">Scan...</div></div>
+        <div id="card-3" class="card"><div class="status-led"></div><h3>Canal AI3</h3><div class="alias">%NOM3%</div><div id="val-3" class="value">0.0 V</div><div id="raw-3" class="raw">Registre Modbus : 0</div><div id="mode-3" style="font-size:0.8rem; opacity:0.6; margin-top:5px;">Scan...</div></div>
+        <div id="card-4" class="card"><div class="status-led"></div><h3>Canal AI4</h3><div class="alias">%NOM4%</div><div id="val-4" class="value">0.0 V</div><div id="raw-4" class="raw">Registre Modbus : 0</div><div id="mode-4" style="font-size:0.8rem; opacity:0.6; margin-top:5px;">Scan...</div></div>
+        <div id="card-5" class="card"><div class="status-led"></div><h3>Canal AI5</h3><div class="alias">%NOM5%</div><div id="val-5" class="value">0.0 V</div><div id="raw-5" class="raw">Registre Modbus : 0</div><div id="mode-5" style="font-size:0.8rem; opacity:0.6; margin-top:5px;">Scan...</div></div>
+        <div id="card-6" class="card"><div class="status-led"></div><h3>Canal AI6</h3><div class="alias">%NOM6%</div><div id="val-6" class="value">0.0 V</div><div id="raw-6" class="raw">Registre Modbus : 0</div><div id="mode-6" style="font-size:0.8rem; opacity:0.6; margin-top:5px;">Scan...</div></div>
+        <div id="card-7" class="card"><div class="status-led"></div><h3>Canal AI7</h3><div class="alias">%NOM7%</div><div id="val-7" class="value">0.0 V</div><div id="raw-7" class="raw">Registre Modbus : 0</div><div id="mode-7" style="font-size:0.8rem; opacity:0.6; margin-top:5px;">Scan...</div></div>
+    </div>
+
+    <div class="btn-container">
+        <a href="/telecharger" id="btn-log" class="btn-inactif">Vérification de la carte SD...</a>
     </div>
 </body>
 </html>
