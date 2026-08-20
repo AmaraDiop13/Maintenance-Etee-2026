@@ -25,14 +25,14 @@ const String MOT_DE_PASSE_WIFI = "Aylmer2026";
 
 // Étiquettes textuelles des Canaux de Supervision
 const String NOMS_CANAUX[8] = {
-    "Courant Turbine (Dwyer CCT60)", // Canal 0 étalonné en Ampères
-    "Capteur Pression Vapeur",
-    "Débitmètre Entrée",
-    "Niveau Cuve Eau",
-    "Canal Non Utilisé",  
-    "Canal Non Utilisé",  
-    "Vitesse Turbine",
-    "Mesure Sécurité Secours"
+    "NEANT", // Canal 0 étalonné en Ampères
+    "NEANT",
+    "MOTEUR",
+    "L1 ",
+    "L2",  
+    "L3",  
+    "NEANT",
+    "NEANT"
 };
 
 #endif

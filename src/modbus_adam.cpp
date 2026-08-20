@@ -7,18 +7,19 @@ float valeursConverties[8] = {0.0};
 int estVide[8] = {0};
 bool adamEnLigne = false;
 
-uint16_t codesConfigurationADAM[8] = {0x0323, 0x0323, 0x0323, 0x0323, 0x0323, 0x0323, 0x0323, 0x0323};
-String unitesCanaux[8] = {"A", "V", "V", "V", "V", "V", "V", "V"}; // Canal 0 forcé en A (Ampères)
-String typesEntreesDetectes[8] = {"+/- 10 V", "+/- 10 V", "+/- 10 V", "+/- 10 V", "+/- 10 V", "+/- 10 V", "+/- 10 V", "+/- 10 V"};
+// Mise à jour de l'affichage de configuration pour refléter le 4-20 mA
+uint16_t codesConfigurationADAM[8] = {0x0180, 0x0180, 0x0180, 0x0180, 0x0180, 0x0180, 0x0180, 0x0180};
+String unitesCanaux[8] = {"A", "mA", "mA", "mA", "mA", "mA", "mA", "mA"}; // Canal 0 en Ampères, le reste en mA
+String typesEntreesDetectes[8] = {"4~20 mA", "4~20 mA", "4~20 mA", "4~20 mA", "4~20 mA", "4~20 mA", "4~20 mA", "4~20 mA"};
 
 EthernetClient modbusClient;
 
 void scannerConfigurationADAM() {
-    Serial.println("[MODBUS] Configuration figée d'usine sur la plage du labo (+/- 10V).");
+    Serial.println("[MODBUS] Configuration figée d'usine sur la plage industrielle (4~20 mA).");
     for (int i = 0; i < 8; i++) {
-        codesConfigurationADAM[i] = 0x0323; 
-        typesEntreesDetectes[i] = "+/- 10 V";
-        unitesCanaux[i] = (i == 0) ? "A" : "V"; 
+        codesConfigurationADAM[i] = 0x0180; 
+        typesEntreesDetectes[i] = "4~20 mA";
+        unitesCanaux[i] = (i == 0) ? "A" : "mA"; 
     }
 }
 
@@ -54,25 +55,28 @@ void requeteLectureADAM() {
         valeursBrutesADAM[i] = (highByte << 8) | lowByte;
         uint16_t brut = valeursBrutesADAM[i];
 
-        // Équation d'échelle globale de l'ADAM pour du +/- 10V
-        float tensionBrute = ((float)brut / 65535.0) * 20.0 - 10.0;
+        // --- NOUVELLE LOGIQUE 4-20 mA ---
+        
+        // 1. Calcul du courant brut reçu par l'ADAM en milliampères (mA)
+        // L'ADAM lit 0 brut à 4 mA, et 65535 brut à 20 mA.
+        float courant_mA = 4.0 + ((float)brut / 65535.0) * 16.0;
 
-        // Détection de fil flottant/vide
-        if (brut >= 32740 && brut <= 32785) {
+        // 2. Le Super Filtre anti-fil coupé / canal vide (Solution B)
+        if (courant_mA < 3.8) {
+            // Le courant est anormalement bas (< 4mA) = fil débranché
             estVide[i] = 1;
             valeursConverties[i] = 0.0;
         } else {
             estVide[i] = 0;
             
-            // Étalonnage industriel spécifique
+            // 3. Étalonnage selon les capteurs branchés
             if (i == 0) {
-                // Étalonnage Dwyer CCT60 (0-10V -> 0-20A). On ne garde que la partie positive
-                if (tensionBrute < 0.05) tensionBrute = 0.0;
-                valeursConverties[i] = tensionBrute * 2.0; 
+                // Canal 0 : Capteur Dwyer (4-20 mA correspond à 0-20 A physiques du barrage)
+                float courant_Amperes = ((float)brut / 65535.0) * 20.0;
+                valeursConverties[i] = courant_Amperes; 
             } else {
-                // Canaux standards restants (Volts)
-                if (abs(tensionBrute) < 0.06) tensionBrute = 0.0;
-                valeursConverties[i] = tensionBrute;
+                // Canaux standards restants : on affiche directement les milliampères (mA)
+                valeursConverties[i] = courant_mA;
             }
         }
         indexOctet += 2;
