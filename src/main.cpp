@@ -5,6 +5,16 @@
 #include <SD.h>
 #include <time.h>
 
+// Déclaration de l'outil de mémoire
+Preferences preferences;
+
+// VALEURS PAR DÉFAUT (Valeurs d'usine)
+String NOM_BARRAGE = "Barrage_AYLMER";
+String MOT_DE_PASSE_WIFI = "Aylmer2026";
+String NOMS_CANAUX[8] = {
+    "NEANT", "NEANT", "MOTEUR", "L1 ", "L2", "L3", "NEANT", "NEANT"
+};
+
 String fichierLogActuel = "";
 
 void gererAutodestructionEtNomFichier(struct tm* timeinfo) {
@@ -18,8 +28,6 @@ void gererAutodestructionEtNomFichier(struct tm* timeinfo) {
         fichierLogActuel = nouveauFichier;
         Serial.println("[📊 MOIS ACTIVE] Nouveau fichier : " + fichierLogActuel);
 
-        // 💣 AUTODESTRUCTION GLISSANTE : Rétention stricte de 3 mois
-        // Pour supprimer ce qui a dépassé 3 mois, on cible le fichier d'il y a 4 mois
         int moisAncien = timeinfo->tm_mon + 1 - 4; 
         int anneeAncienne = timeinfo->tm_year + 1900;
         
@@ -43,7 +51,6 @@ void ecrireLogSysteme() {
 
     struct tm timeinfo;
     if (!getLocalTime(&timeinfo)) {
-        Serial.println("[❌ HORLOGE] Synchro temporelle manquante pour le log.");
         return;
     }
 
@@ -51,9 +58,7 @@ void ecrireLogSysteme() {
 
     int heure = timeinfo.tm_hour;
 
-    // Plages horaires de 3h réglementaires : Matin (9h à 12h) et Après-midi (14h à 17h)
     if ((heure >= 9 && heure < 12) || (heure >= 14 && heure < 17)) {
-        
         File fichier = SD.open(fichierLogActuel.c_str(), FILE_APPEND);
         if (fichier) {
             char horodatage[30];
@@ -72,7 +77,6 @@ void ecrireLogSysteme() {
             fichier.close();
             Serial.println("[💾 LOGGER] Enregistrement 15-min valide effectue.");
         } else {
-            Serial.println("[❌ LOGGER] Erreur critique d'ecriture.");
             sdDisponible = false; 
         }
     }
@@ -82,10 +86,21 @@ void setup() {
     Serial.begin(115200);
     delay(1500); 
 
+    // --- CHARGEMENT DE LA MÉMOIRE AU DÉMARRAGE ---
+    preferences.begin("param_barrage", false); // Ouvre le dossier mémoire
+    
+    // On écrase les valeurs d'usine par les valeurs sauvegardées (s'il y en a)
+    NOM_BARRAGE = preferences.getString("nom", NOM_BARRAGE);
+    MOT_DE_PASSE_WIFI = preferences.getString("mdp", MOT_DE_PASSE_WIFI);
+    for (int i = 0; i < 8; i++) {
+        String cle = "ch_" + String(i);
+        NOMS_CANAUX[i] = preferences.getString(cle.c_str(), NOMS_CANAUX[i]);
+    }
+    // ---------------------------------------------
+
     initialiserReseaux();
     scannerConfigurationADAM();
 
-    // Configuration de l'heure du Québec (NTP)
     configTime(-5 * 3600, 3600, "pool.ntp.org", "time.nist.gov");
     Serial.println("[SYSTEME] Initialisation complete. Pret.");
 }
@@ -99,7 +114,6 @@ void loop() {
         requeteLectureADAM(); 
     }
 
-    // ⏱️ CADENCE INDUSTRIELLE : Enregistrement toutes les 15 minutes (900 000 ms)
     static unsigned long precedentMillisLog = 0;
     if (millis() - precedentMillisLog > 900000) { 
         precedentMillisLog = millis();

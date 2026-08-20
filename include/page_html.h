@@ -31,7 +31,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         .card.no-adam .status-led { background-color: #ff3333; box-shadow: none; animation: none; }
         @keyframes blinker { 50% { opacity: 0.3; } }
 
-        /* AJOUT LOGS : Styles du bouton de téléchargement SD (Couleur Orange comme l'écriture) */
+        /* Styles des boutons du bas */
         .btn-container { text-align: center; margin-top: 40px; margin-bottom: 30px; width: 100%; }
         
         .btn-actif { 
@@ -65,6 +65,26 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             opacity: 0.6; 
             pointer-events: none; 
         }
+
+        /* Style du bouton Admin */
+        .btn-admin {
+            display: inline-block;
+            padding: 14px 28px;
+            color: #ffffff;
+            background-color: transparent;
+            border: 2px solid #00ffcc;
+            text-decoration: none;
+            font-weight: bold;
+            border-radius: 6px;
+            margin-left: 15px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 255, 204, 0.2);
+        }
+        .btn-admin:hover {
+            background-color: #00ffcc;
+            color: #1e1e2f;
+            box-shadow: 0 4px 20px rgba(0, 255, 204, 0.5);
+        }
     </style>
     <script>
         setInterval(function() {
@@ -73,7 +93,6 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
                 .then(data => {
                     document.getElementById('main-title').innerText = "MAINTENANCE - " + data.nom_barrage.replace('_', ' ');
                     
-                    /* AJOUT LOGS : Activation ou désactivation du bouton SD */
                     let btnSD = document.getElementById('btn-log');
                     if (data.sd_present) {
                         btnSD.className = 'btn-actif';
@@ -103,11 +122,9 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
                             modeDiv.innerText = 'Flottant'; 
                         } else {
                             card.className = 'card';
-                            /* ADAPTATION AUTOMATIQUE : Unité dynamique issue du JSON (V ou mA) */
                             valDiv.innerText = data.tensions[i] + ' ' + data.unites[i];
                             valDiv.className = 'value';
                             rawDiv.innerText = 'Registre Modbus : ' + data.brutes[i];
-                            /* ADAPTATION AUTOMATIQUE : Type de trame détecté */
                             modeDiv.innerText = 'Configuration : ' + data.config_modes[i];
                         }
                     }
@@ -131,6 +148,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 
     <div class="btn-container">
         <a href="/telecharger" id="btn-log" class="btn-inactif">Vérification de la carte SD...</a>
+        <a href="/admin" class="btn-admin">⚙️ Espace Administration</a>
     </div>
 </body>
 </html>
